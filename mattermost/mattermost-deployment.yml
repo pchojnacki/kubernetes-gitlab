@@ -1,47 +1,78 @@
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: gitlab
+  name: mattermost
   namespace: gitlab
 spec:
   replicas: 1
   template:
     metadata:
       labels:
-        name: gitlab
-        app: gitlab
+        name: mattermost
+        app: mattermost
     spec:
       containers:
       - name: gitlab
         image: gitlab/gitlab-ce:8.15.4-ce.1
         imagePullPolicy: Always
         env:
+        - name: DB_USER
+          value: gitlab
+        - name: DB_PASS
+          value: +BP52QIxpT/flVCMpL3KXA==
+        - name: DB_NAME
+          value: gitlab_production
+        - name: DB_HOST
+          value: gitlab-postgresql
+        - name: MATTERMOST_HOSTNAME
+          value: mattermost.example.com
+        - name: GITLAB_HOSTNAME
+          value: gitlab.example.com
+        - name: REDIS_HOST
+          value: gitlab-redis
+        - name: MATTERMOST_APP_SECRET
+          value: "secret"
+        - name: MATTERMOST_APP_UID
+          value: "uid"
         - name: GITLAB_OMNIBUS_CONFIG
           value: |
-            external_url "http://gitlab.example.com"
+            external_url 'http://${GITLAB_HOSTNAME}/'
+            mattermost_external_url 'http://${MATTERMOST_HOSTNAME}/'
+            gitlab_rails['enable']=false
+            unicorn['enable']=false
+            sidekiq['enable']=false
+            gitlab_workhorse['enable']=false
             postgresql['enable']=false
-            gitlab_rails['db_host'] = 'gitlab-postgresql'
-            gitlab_rails['db_password']='+BP52QIxpT/flVCMpL3KXA=='
-            gitlab_rails['db_username']='gitlab'
-            gitlab_rails['db_database']='gitlab_production'
+            gitlab_rails['db_host'] = '${DB_HOST}'
+            gitlab_rails['db_password']='${DB_PASS}'
+            gitlab_rails['db_username']='${DB_USER}'
+            gitlab_rails['db_database']='${DB_NAME}'
             redis['enable'] = false
-            gitlab_rails['redis_host']='gitlab-redis'
+            gitlab_rails['redis_host']='${REDIS_HOST}'
+            mattermost['file_directory']='/gitlab-data/mattermost'
+            mattermost['sql_driver_name'] = 'postgres'
+            mattermost['sql_data_source'] = 'user=${DB_USER} host=${DB_HOST} port=5432 dbname=${DB_NAME} password=${DB_PASS} sslmode=disable'
+            mattermost['gitlab_enable']=true
+            mattermost['gitlab_secret']='${MATTERMOST_APP_SECRET}'
+            mattermost['gitlab_id']='${MATTERMOST_APP_UID}'
+            mattermost['gitlab_scope']=''
+            mattermost['gitlab_auth_endpoint']='http://${GITLAB_HOSTNAME}/oauth/authorize'
+            mattermost['gitlab_token_endpoint']='http://${GITLAB_HOSTNAME}/oauth/token'
+            mattermost['gitlab_user_api_endpoint']='http://${GITLAB_HOSTNAME}/api/v3/user'
         ports:
         - name: http
           containerPort: 80
-        - name: ssh
-          containerPort: 22
         livenessProbe:
           httpGet:
-            path: /help
+            path: /
             port: 80
-          initialDelaySeconds: 180
+          initialDelaySeconds: 120
           timeoutSeconds: 15
         readinessProbe:
           httpGet:
-            path: /help
+            path: /
             port: 80
-          initialDelaySeconds: 15
+          initialDelaySeconds: 20
           timeoutSeconds: 1
       volumes:
       - name: data
